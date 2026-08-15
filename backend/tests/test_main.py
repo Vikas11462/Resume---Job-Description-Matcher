@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from fastapi.testclient import TestClient
 import pytest
-from app.main import app
+from app.main import app, generate_suggestions
 from tests.test_extract import generate_minimal_valid_pdf, generate_sample_docx
 
 client = TestClient(app)
@@ -17,6 +17,19 @@ def test_health_check():
     data = response.json()
     assert data["status"] == "online"
     assert data["version"] == "1.0.0"
+
+
+def test_cors_headers():
+    """Verifies that CORS middleware headers are properly returned."""
+    response = client.options(
+        "/analyze",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 
 def test_analyze_with_text_payload():
@@ -35,6 +48,9 @@ def test_analyze_with_text_payload():
     assert "Docker" in data["missing_keywords"]
     assert "Kubernetes" in data["missing_keywords"]
     assert "Python" not in data["missing_keywords"]
+    assert "suggestions" in data
+    assert len(data["suggestions"]) >= 1
+    assert any("Docker" in s for s in data["suggestions"])
     assert data["extracted_skills_count"] >= 3
     assert data["jd_skills_count"] >= 3
 
@@ -53,6 +69,7 @@ def test_analyze_with_pdf_upload(tmp_path: Path):
     result = response.json()
     assert result["score"] > 0.0
     assert "Docker" in result["missing_keywords"]
+    assert len(result["suggestions"]) >= 1
 
 
 def test_analyze_with_docx_upload(tmp_path: Path):
@@ -91,9 +108,38 @@ def test_analyze_empty_jd():
     assert "cannot be empty" in response.json()["detail"]
 
 
+def test_analyze_empty_file():
+    """Verifies that uploading an empty 0-byte file returns 400 Bad Request."""
+    files = {"resume_file": ("resume.pdf", BytesIO(b""), "application/pdf")}
+    response = client.post("/analyze", data={"jd_text": "Python developer"}, files=files)
+    assert response.status_code == 400
+    assert "file is empty" in response.json()["detail"]
+
+
 def test_analyze_unsupported_file_format():
     """Verifies that uploading an unsupported file type (e.g. .txt) returns 400 Bad Request."""
     files = {"resume_file": ("resume.txt", BytesIO(b"Plain text"), "text/plain")}
     response = client.post("/analyze", data={"jd_text": "Python developer"}, files=files)
     assert response.status_code == 400
     assert "Unsupported file format" in response.json()["detail"]
+
+
+def test_generate_suggestions_rule_logic():
+    """Verifies deterministic suggestion generation for varying scores and missing keywords."""
+    low_match_suggestions = generate_suggestions(
+        score=25.0,
+        missing=["Docker", "Kubernetes", "AWS"],
+        resume_skills_count=2,
+        jd_skills_count=6,
+    )
+    assert any("Docker" in s for s in low_match_suggestions)
+    assert any("Low overall keyword overlap" in s for s in low_match_suggestions)
+    assert any("Technical Skills" in s for s in low_match_suggestions)
+
+    high_match_suggestions = generate_suggestions(
+        score=85.0,
+        missing=[],
+        resume_skills_count=10,
+        jd_skills_count=8,
+    )
+    assert any("Strong technical alignment" in s for s in high_match_suggestions)
