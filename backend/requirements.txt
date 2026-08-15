@@ -1,0 +1,15 @@
+# Core REST API Framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+python-multipart>=0.0.9
+
+# NLP & Machine Learning Engine
+spacy>=3.7.4
+scikit-learn>=1.4.0
+
+# Document Ingestion & Text Extraction
+pdfplumber>=0.10.4
+python-docx>=1.1.0
+
+# Testing & Quality Assurance
+pytest>=8.0.0
