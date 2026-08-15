@@ -38,7 +38,7 @@ export default function Home() {
     setErrorMessage(null);
 
     let backendUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
-    
+
     // If running in production on Vercel and no backend URL is set
     if (!backendUrl && typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
       setErrorMessage(
@@ -207,11 +207,10 @@ export default function Home() {
                 type="button"
                 onClick={handleAnalyze}
                 disabled={!canAnalyze || isLoading}
-                className={`w-full sm:w-auto px-6 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
-                  canAnalyze && !isLoading
+                className={`w-full sm:w-auto px-6 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${canAnalyze && !isLoading
                     ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 cursor-pointer active:scale-[0.98]"
                     : "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50"
-                }`}
+                  }`}
               >
                 {isLoading ? (
                   <>
