@@ -37,8 +37,19 @@ export default function Home() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    const backendUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    let backendUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+    
+    // If running in production on Vercel and no backend URL is set
+    if (!backendUrl && typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      setErrorMessage(
+        "Backend API URL is not configured on Vercel. Please go to Vercel Project Settings -> Environment Variables, add NEXT_PUBLIC_API_URL with your live Render backend URL (e.g. https://your-backend.onrender.com), and click Redeploy."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    // Default to localhost for local development and strip trailing slashes
+    backendUrl = (backendUrl || "http://localhost:8000").replace(/\/+$/, "");
 
     const formData = new FormData();
     if (resumeMode === "upload" && resumeFile) {
