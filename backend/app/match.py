@@ -1,26 +1,92 @@
 """Algorithmic Matching Engine for Resume-JD Matcher.
 
-Implements TF-IDF vectorization and Cosine Similarity to calculate
-an explainable relevance score between candidate resumes and job descriptions.
+Implements TF-IDF vectorization, Cosine Similarity, and taxonomy-based
+skill extraction to identify missing keywords between resumes and job descriptions.
 """
 
-from typing import List, Set
+import re
+from typing import Dict, List, Set
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from app.clean import clean_text
+from app.skills_dict import get_all_skills_list, get_skills_set
+
+
+def _get_skill_display_map() -> Dict[str, str]:
+    """Builds a mapping from lowercase canonical skill terms to human-readable display names."""
+    return {skill.lower(): skill for skill in get_all_skills_list()}
+
+
+def extract_skills_from_text(text: str) -> Set[str]:
+    """Extracts all recognized technical skills present in the text.
+
+    Supports both single-word terms (e.g. 'Docker', 'Python') and
+    multi-word compound phrases (e.g. 'REST API', 'Machine Learning', 'Next.js').
+
+    Args:
+        text (str): Raw or extracted textual content.
+
+    Returns:
+        Set[str]: Set of lowercased canonical skill terms found in the text.
+    """
+    if not text or not isinstance(text, str):
+        return set()
+
+    lowered_text = f" {text.lower()} "
+    found_skills: Set[str] = set()
+
+    for skill in get_all_skills_list():
+        skill_lower = skill.lower()
+        # Use boundary check that safely handles special chars (C++, C#, .NET, Node.js)
+        pattern = r"(?<![a-zA-Z0-9_])" + re.escape(skill_lower) + r"(?![a-zA-Z0-9_])"
+        if re.search(pattern, lowered_text):
+            found_skills.add(skill_lower)
+
+    return found_skills
+
+
+def missing_keywords(resume_text: str, jd_text: str) -> List[str]:
+    """Identifies technical skills mentioned in the JD that are absent from the resume.
+
+    Pipeline:
+    1. Extracts domain skills from JD text using the curated taxonomy.
+    2. Extracts domain skills from Resume text.
+    3. Calculates set difference: (JD_skills - Resume_skills).
+    4. Formats output list in original human-readable display casing.
+
+    Args:
+        resume_text (str): Extracted resume textual content.
+        jd_text (str): Target job description text.
+
+    Returns:
+        List[str]: Alphabetically sorted list of missing skill strings in display casing.
+    """
+    if not jd_text or not isinstance(jd_text, str):
+        return []
+
+    jd_skills = extract_skills_from_text(jd_text)
+    if not jd_skills:
+        return []
+
+    resume_skills = extract_skills_from_text(resume_text) if resume_text else set()
+
+    missing_set = jd_skills - resume_skills
+    display_map = _get_skill_display_map()
+
+    # Map back to display casing and sort alphabetically
+    formatted_missing = [display_map.get(s, s.title()) for s in missing_set]
+    return sorted(formatted_missing)
 
 
 def compute_score(resume_text: str, jd_text: str) -> float:
     """Calculates the match score (0.0% to 100.0%) between a resume and a JD.
 
     Pipeline:
-    1. Preprocesses and normalizes both texts via clean_text() (lemmatization, stopword removal).
+    1. Preprocesses both texts via clean_text() (lemmatization, stopword removal).
     2. Constructs a 2-document corpus [cleaned_resume, cleaned_jd].
-    3. Transforms documents into Term Frequency-Inverse Document Frequency (TF-IDF) feature vectors,
-       evaluating unigrams and bigrams (ngram_range=(1, 2)).
-    4. Computes the cosine angle between vectors:
-       cos(theta) = (A . B) / (||A|| * ||B||)
-    5. Converts cosine similarity [0.0, 1.0] to an explainable percentage [0.0, 100.0].
+    3. Transforms documents into Term Frequency-Inverse Document Frequency (TF-IDF) feature vectors.
+    4. Computes cosine angle between vectors: cos(theta) = (A . B) / (||A|| * ||B||).
+    5. Converts cosine similarity [0.0, 1.0] to percentage [0.0, 100.0].
 
     Args:
         resume_text (str): Raw or extracted textual content of candidate resume.
@@ -50,7 +116,6 @@ def compute_score(resume_text: str, jd_text: str) -> float:
     try:
         tfidf_matrix = vectorizer.fit_transform([cleaned_resume, cleaned_jd])
     except ValueError:
-        # Occurs if vocabulary contains only empty/ignored tokens
         return 0.0
 
     # Compute cosine similarity between resume vector (row 0) and JD vector (row 1)

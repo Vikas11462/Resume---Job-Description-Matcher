@@ -1,7 +1,7 @@
 """Unit tests for algorithmic matching and similarity scoring module (app.match)."""
 
 import pytest
-from app.match import compute_score
+from app.match import compute_score, extract_skills_from_text, missing_keywords
 
 
 def test_compute_score_identical_texts():
@@ -66,3 +66,58 @@ def test_compute_score_empty_or_falsy_inputs():
     assert compute_score("Python developer", "") == 0.0
     assert compute_score("", "") == 0.0
     assert compute_score("   ", "   ") == 0.0
+
+
+def test_extract_skills_from_text_special_characters():
+    """Verifies extraction of single-word, multi-word, and special-character skills."""
+    text = "Core stack includes C++, Node.js, Next.js, REST API, and Machine Learning."
+    skills = extract_skills_from_text(text)
+
+    assert "c++" in skills
+    assert "node.js" in skills
+    assert "next.js" in skills
+    assert "rest api" in skills
+    assert "machine learning" in skills
+
+
+def test_missing_keywords_detection_and_formatting():
+    """Verifies detection of single-word and compound missing skills in proper display casing."""
+    resume_text = (
+        "Vikas | B.Tech CSE\n"
+        "Skills: Python, FastAPI, PostgreSQL, Git, React."
+    )
+    jd_text = (
+        "Looking for a Full Stack Developer.\n"
+        "Must have: Python, FastAPI, React, PostgreSQL.\n"
+        "Required Cloud/DevOps: Docker, Kubernetes, AWS, and CI/CD pipeline experience."
+    )
+
+    missing = missing_keywords(resume_text, jd_text)
+
+    # Missing from resume: AWS, CI/CD, Docker, Kubernetes
+    assert "Docker" in missing
+    assert "Kubernetes" in missing
+    assert "AWS" in missing
+    assert "CI/CD" in missing
+
+    # Present in resume: should NOT be in missing
+    assert "Python" not in missing
+    assert "FastAPI" not in missing
+    assert "React" not in missing
+    assert "PostgreSQL" not in missing
+
+
+def test_missing_keywords_empty_when_all_skills_covered():
+    """Verifies that an empty list is returned when the resume contains all required skills."""
+    jd_text = "Requirements: Python, FastAPI, Docker, Redis."
+    resume_text = "Proficient in Python, FastAPI, Redis, and Docker deployment."
+
+    missing = missing_keywords(resume_text, jd_text)
+    assert missing == []
+
+
+def test_missing_keywords_empty_or_falsy_inputs():
+    """Verifies safe handling of empty inputs in missing_keywords."""
+    assert missing_keywords("Python Developer", "") == []
+    assert missing_keywords("", "Requirements: Docker, Kubernetes") == ["Docker", "Kubernetes"]
+    assert missing_keywords("", "") == []
